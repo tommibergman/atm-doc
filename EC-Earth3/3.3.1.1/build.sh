@@ -5,7 +5,7 @@
 #
 # puhti.csc.fi, Intel compiler suite
 # jukka-pekka.keskinen@helsinki.fi, juha.lento@csc.fi
-# 2017-09-03, 2017-09-21, 2019-02-27, 2019-08-21
+# 2017-09-03, 2017-09-21, 2019-02-27, 2019-08-30
 
 usage="
 Usage: bash $0
@@ -39,7 +39,7 @@ log files. Something like
 ### Local/user defaults ###
 
 : ${TAG:=3.3.1.1}
-: ${BLDROOT:=/tmp/$USER/ece3}
+: ${BLDROOT:=$TMPDIR/ece3}
 : ${INSTALLROOT:=/projappl/project_$(id -g)/$USER/ece3}
 : ${RUNROOT:=/scratch/project_$(id -g)/$USER/ece3}
 : ${PLATFORM:=csc-puhti-intel}
@@ -66,11 +66,11 @@ module load intel/19.0.4
 module load hpcx-mpi/2.4.0
 module load intel-mkl/2019.0.4
 module load hdf/4.2.13
-module load hdf5/1.10.4
+module load hdf5/1.10.4-mpi
 module load netcdf/4.7.0
 module load netcdf-fortran/4.4.4
-module load eccodes/2.5.0
-
+module load grib-api/1.24.0
+module load cmake/3.12.3
 
 ### Helper functions ###
 
@@ -93,6 +93,7 @@ updatesources () {
     mkdir -p $BLDROOT
     cd $BLDROOT
     svn checkout https://svn.ec-earth.org/ecearth3/tags/$TAG $TAG
+    svn checkout https://svn.ec-earth.org/vendor/gribex/gribex_000370 gribex_000370
 }
 
 ecconfig () {
@@ -122,9 +123,7 @@ nemo () {
 
 oifs () {
     # gribex first
-    cd ${BLDROOT}/${TAG}/sources/ifs-36r4
-    tar xf ${GRIBEX_TAR_GZ}
-    cd gribex_000370
+    cd ${BLDROOT}/gribex_000370
     ./build_library <<EOF
 i
 y
@@ -156,6 +155,12 @@ runoff-mapper () {
 amip-forcing () {
     cd ${BLDROOT}/${TAG}/sources/amip-forcing/src
     make
+}
+
+lpj-guess () {
+    cd ${BLDROOT}/${TAG}/sources/lpjg/build
+    cmake .. -DCMAKE_Fortran_FLAGS="-I${HPCX_MPI_INSTALL_ROOT}/lib"
+    make # Fails with int <---> MPI_Comm type errors...
 }
 
 # Install
@@ -201,7 +206,7 @@ create_ece_run () {
 
 if ! ${sourced}; then
     updatesources
-    ( module list -t 2>&1 ) > ${BLDROOT}/${TAG}/modules.log
+    ( module -t list 2>&1 ) > ${BLDROOT}/${TAG}/modules.log
     ( ecconfig       2>&1 ) > ${BLDROOT}/${TAG}/ecconf.log
     ( oasis          2>&1 ) > ${BLDROOT}/${TAG}/oasis.log    &
     wait
